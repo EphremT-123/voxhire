@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>VoxHire Live Video Session</title>
+    <style>
+        video {
+            width: 300px;
+            height: 200px;
+            background: #222;
+            margin: 10px;
+        }
+
+        button {
+            margin: 5px;
+        }
+
+        #log {
+            background: #f0f0f0;
+            padding: 10px;
+            font-family: monospace;
+            height: 100px;
+            overflow-y: auto;
+        }
+    </style>
+</head>
+
+<body>
+    <h1>VoxHire Video Call Test</h1>
+    <div>
+        <label>Session ID: <input id="sessionId" type="text" value="my-room" /></label><br />
+        <label>Your Name: <input id="username" type="text" value="Artist" /></label><br />
+        <button onclick="join()">Join Room</button>
+        <button id="callBtn" disabled onclick="startCall()">Call Other Person</button>
+        <button id="hangupBtn" disabled onclick="hangUp()">Hang Up</button>
+    </div>
+    <hr />
+    <div>
+        <p>Local Video:</p>
+        <video id="localVideo" autoplay muted playsinline></video>
+        <p>Remote Video:</p>
+        <video id="remoteVideo" autoplay playsinline></video>
+    </div>
+    <div id="log"></div>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script>
+        let socket;
+        let localStream;
+        let peerConnection;
+        const configuration = {};
+
+        const log = (msg) => {
+            const el = document.getElementById('log');
+            el.innerHTML += msg + '<br>';
+        };
+
+        document.getElementById('callBtn').addEventListener('click', startCall);
+        document.getElementById('hangupBtn').addEventListener('click', () => {
+            const remote = prompt('Enter remote username to hang up:');
+            if (remote) hangUp(remote);
+        });
+
+        async function join() {
+            socket = io({ transports: ['websocket'] });
+            const sessionId = document.getElementById('sessionId').value;
+            const userId = document.getElementById('username').value;
+            socket.userId = userId;
+            socket.emit('join-session', { sessionId, userId });
+            log(`Joined room ${sessionId} as ${userId}`);
+
+            try {
+                localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+                document.getElementById('localVideo').srcObject = localStream;
+                document.getElementById('callBtn').disabled = false;
+                log('Camera/mic ready');
+            } catch (e) {
+                log('Error accessing media: ' + e.message);
+            }
+
+            socket.on('user-joined', ({ userId }) => log(`User ${userId} joined room`));
+            socket.on('offer', handleOffer);
+            socket.on('answer', handleAnswer);
+            socket.on('ice-candidate', handleICECandidate);
+            socket.on('hang-up', () => {
+                log('Remote hung up');
+                closeCall();
+            });
+        }
+
+        async function startCall() {
+            const remoteUserId = prompt('Enter remote username to call (e.g., Client):');
+            if (!remoteUserId) return;
+
+            peerConnection = new RTCPeerConnection(configuration);
+            localStream.getTracks().forEach(track => peerConnection.addTrack(track, localStream));
+
+            peerConnection.ontrack = (event) => {
+                log('Received remote track');
+                document.getElementById('remoteVideo').srcObject = event.streams[0];
+            };
+
+            peerConnection.onicecandidate = (event) => {
+                if (event.candidate) {
+                    socket.emit('ice-candidate', {
+                        sessionId: document.getElementById('sessionId').value,
+                        toUserId: remoteUserId,
+                        candidate: event.candidate
+                    });
+                }
+            };
+
+            const offer = await peerConnection.createOffer();
+            await peerConnection.setLocalDescription(offer);
+            socket.emit('offer', {
+                sessionId: document.getElementById('sessionId').value,
+                toUserId: remoteUserId,
+                offer
+            });
+            log('Offer sent to ' + remoteUserId);
+            document.getElementById('hangupBtn').disabled = false;
+        }
+
+        function handleOffer({ fromUserId, offer }) {
+            log('Offer received from ' + fromUserId);
+            peerConnection = new RTCPeerConnection(configuration);
+            localStream.getTracks().forEach(track => peerConnection.addTrack(track, localStream));
+
+            peerConnection.ontrack = (event) => {
+                log('Received remote track from offer');
+                document.getElementById('remoteVideo').srcObject = event.streams[0];
+            };
+            peerConnection.onicecandidate = (event) => {
+                if (event.candidate) {
+                    socket.emit('ice-candidate', {
+                        sessionId: document.getElementById('sessionId').value,
+                        toUserId: fromUserId,
+                        candidate: event.candidate
+                    });
+                }
+            };
+
+            peerConnection.setRemoteDescription(new RTCSessionDescription(offer))
+                .then(() => peerConnection.createAnswer())
+                .then(answer => peerConnection.setLocalDescription(answer))
+                .then(() => {
+                    socket.emit('answer', {
+                        sessionId: document.getElementById('sessionId').value,
+                        toUserId: fromUserId,
+                        answer: peerConnection.localDescription
+                    });
+                    log('Answer sent to ' + fromUserId);
+                    document.getElementById('hangupBtn').disabled = false;
+                })
+                .catch(e => log('Error handling offer: ' + e));
+        }
+
+        function handleAnswer({ fromUserId, answer }) {
+            log('Answer received from ' + fromUserId);
+            peerConnection.setRemoteDescription(new RTCSessionDescription(answer));
+        }
+
+        function handleICECandidate({ fromUserId, candidate }) {
+            peerConnection.addIceCandidate(new RTCIceCandidate(candidate));
+        }
+
+        function hangUp(remoteUserId) {
+            socket.emit('hang-up', {
+                sessionId: document.getElementById('sessionId').value,
+                toUserId: remoteUserId
+            });
+            closeCall();
+        }
+
+        function closeCall() {
+            if (peerConnection) {
+                peerConnection.close();
+                peerConnection = null;
+            }
+            document.getElementById('remoteVideo').srcObject = null;
+            document.getElementById('hangupBtn').disabled = true;
+            log('Call ended');
+        }
+    </script>
+</body>
+
+</html>
