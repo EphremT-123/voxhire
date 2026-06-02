@@ -1,16 +1,15 @@
 import axios from 'axios';
 
-const getBaseUrl = () => {
-    const hostname = window.location.hostname;
-    if (hostname === 'localhost' || hostname === '127.0.0.1') {
-        return 'http://localhost:5000/api';
-    }
-    // For phone access - use HTTP backend
-    return `http://${hostname}:5000/api`;
-};
+const PRODUCTION_URL = 'https://voxhire-backend.onrender.com/api';
+const DEVELOPMENT_URL = 'http://localhost:5000/api';
 
 const api = axios.create({
-    baseURL: getBaseUrl(),
+    baseURL: window.location.hostname === 'localhost'
+        ? DEVELOPMENT_URL
+        : PRODUCTION_URL,
+    headers: {
+        'Content-Type': 'application/json',
+    },
 });
 
 api.interceptors.request.use((config) => {
@@ -20,5 +19,16 @@ api.interceptors.request.use((config) => {
     }
     return config;
 });
+
+api.interceptors.response.use(
+    (response) => response,
+    (error) => {
+        if (error.response?.status === 401) {
+            localStorage.removeItem('voxhire-token');
+            window.location.href = '/login';
+        }
+        return Promise.reject(error);
+    }
+);
 
 export default api;
