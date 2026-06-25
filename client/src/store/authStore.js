@@ -1,12 +1,11 @@
 import { create } from 'zustand';
 import api from '../services/api';
 
-const useAuthStore = create((set, get) => ({
+const useAuthStore = create((set) => ({
     user: null,
     token: localStorage.getItem('voxhire-token') || null,
     isAuthenticated: !!localStorage.getItem('voxhire-token'),
 
-    // Login
     login: async (email, password) => {
         const { data } = await api.post('/auth/login', { email, password });
         localStorage.setItem('voxhire-token', data.token);
@@ -14,7 +13,6 @@ const useAuthStore = create((set, get) => ({
         return data;
     },
 
-    // Register
     register: async (formData) => {
         const { data } = await api.post('/auth/register', formData);
         localStorage.setItem('voxhire-token', data.token);
@@ -22,13 +20,16 @@ const useAuthStore = create((set, get) => ({
         return data;
     },
 
-    // Logout
+    googleLogin: (userData) => {
+        localStorage.setItem('voxhire-token', userData.token);
+        set({ user: userData, token: userData.token, isAuthenticated: true });
+    },
+
     logout: () => {
         localStorage.removeItem('voxhire-token');
         set({ user: null, token: null, isAuthenticated: false });
     },
 
-    // Check if token still valid (fetch profile)
     fetchUser: async () => {
         try {
             const { data } = await api.get('/auth/me');

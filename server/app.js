@@ -21,11 +21,13 @@ const authRoutes = require('./routes/authRoutes');
 const userRoutes = require('./routes/userRoutes');
 const jobRoutes = require('./routes/jobRoutes');
 const postRoutes = require('./routes/postRoutes');
+const googleAuthRoutes = require('./routes/googleAuth');
 
 // Mount routes
 app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/jobs', jobRoutes);
+app.use('/api/auth/google', googleAuthRoutes);
 app.use('/api/posts', postRoutes);
 
 // Health check

@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import useAuthStore from '../store/authStore';
+import GoogleLogin from '../components/GoogleLogin';
 
 const Register = () => {
     const [name, setName] = useState('');
@@ -44,6 +45,12 @@ const Register = () => {
                 <button className="w-full bg-gradient-to-r from-amber-800 to-blue-800 text-white p-3 rounded-xl font-semibold hover:shadow-lg transition">
                     Register
                 </button>
+
+                <div className="mt-4 text-center">
+                    <p className="text-sm text-gray-500 mb-2">Or</p>
+                    <GoogleLogin onSuccess={() => navigate('/dashboard')} />
+                </div>
+
                 <p className="mt-4 text-center text-sm text-gray-600">
                     Already have an account? <Link to="/login" className="text-blue-700 font-semibold hover:underline">Login</Link>
                 </p>
