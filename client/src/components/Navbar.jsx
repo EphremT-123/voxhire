@@ -72,6 +72,7 @@ const Navbar = () => {
                         </span>
                     )}
                 </Link>
+                <Link to="/search" className="text-gray-600 font-medium hover:text-gray-900">🔍 Search</Link>
                 <button onClick={handleLogout} className="bg-red-500 text-white px-3 py-1 rounded-xl font-medium hover:bg-red-600">Logout</button>
             </div>
         </nav>

@@ -35,7 +35,9 @@ const Dashboard = () => {
 
     const loadAllData = async () => {
         try {
-            const [jobsRes, postsRes] = await Promise.all([api.get('/jobs'), api.get('/posts')]);
+            // Artists see all open jobs; clients see only their own
+            const jobsUrl = user?.role === 'client' ? '/jobs/client/my-jobs' : '/jobs';
+            const [jobsRes, postsRes] = await Promise.all([api.get(jobsUrl), api.get('/posts')]);
             setJobs(jobsRes.data || []);
             setPosts(postsRes.data || []);
         } catch (err) { console.error(err); }
@@ -66,32 +68,13 @@ const Dashboard = () => {
         setApplying(true);
         try {
             const formData = new FormData();
-
-            // CRITICAL: Always send coverLetter
             formData.append('coverLetter', coverLetter || '');
-            console.log('📤 Sending coverLetter:', coverLetter);
+            if (portfolioUrl && portfolioUrl.trim() !== '') formData.append('portfolioUrl', portfolioUrl.trim());
+            if (portfolioFile) formData.append('portfolio', portfolioFile);
 
-            if (portfolioUrl && portfolioUrl.trim() !== '') {
-                formData.append('portfolioUrl', portfolioUrl.trim());
-                console.log('📤 Sending portfolioUrl:', portfolioUrl);
-            }
-
-            if (portfolioFile) {
-                formData.append('portfolio', portfolioFile);
-                console.log('📤 Sending portfolio file:', portfolioFile.name);
-            }
-
-            // Debug FormData
-            console.log('📦 FormData contents:');
-            for (let pair of formData.entries()) {
-                console.log('  -', pair[0] + ':', typeof pair[1] === 'string' ? pair[1] : '(file)');
-            }
-
-            const response = await api.post(`/jobs/${applyJobId}/apply`, formData, {
+            await api.post(`/jobs/${applyJobId}/apply`, formData, {
                 headers: { 'Content-Type': 'multipart/form-data' }
             });
-
-            console.log('✅ Server response:', response.data);
 
             setShowApplyModal(false);
             setCoverLetter('');
@@ -100,9 +83,7 @@ const Dashboard = () => {
             alert('✅ Application submitted successfully! 10 connects spent.');
             loadAllData();
         } catch (err) {
-            console.error('❌ Apply error:', err.response?.data || err.message);
-            const errorMsg = err.response?.data?.message || err.response?.data?.error || 'Failed to apply';
-            alert('❌ ' + errorMsg);
+            alert('❌ ' + (err.response?.data?.message || 'Failed to apply'));
         } finally {
             setApplying(false);
         }
@@ -136,25 +117,27 @@ const Dashboard = () => {
                     <h1 className="text-2xl md:text-3xl font-bold text-gray-900">Welcome, {user.name}! 👋</h1>
                     <p className="text-gray-500 mt-1">@{user.username} · {user.role} · 💎 {user.connects} connects</p>
 
-                    <div className="mt-4 relative">
-                        <input
-                            type="text"
-                            placeholder="🔍 Search jobs by title, description, or client..."
-                            value={searchTerm}
-                            onChange={handleSearch}
-                            className="w-full p-4 border border-gray-300 rounded-xl focus:border-gray-600 outline-none text-gray-800 placeholder-gray-400"
-                        />
-                        {searchTerm && (
-                            <span className="absolute right-4 top-4 text-gray-400">{searchResults.length} results</span>
-                        )}
-                    </div>
+                    {user.role === 'artist' && (
+                        <div className="mt-4 relative">
+                            <input
+                                type="text"
+                                placeholder="🔍 Search jobs by title, description, or client..."
+                                value={searchTerm}
+                                onChange={handleSearch}
+                                className="w-full p-4 border border-gray-300 rounded-xl focus:border-gray-600 outline-none text-gray-800 placeholder-gray-400"
+                            />
+                            {searchTerm && (
+                                <span className="absolute right-4 top-4 text-gray-400">{searchResults.length} results</span>
+                            )}
+                        </div>
+                    )}
                 </div>
 
                 {/* Quick Stats */}
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
                     <div className="bg-white border border-gray-200 rounded-xl p-4 text-center shadow-sm">
                         <div className="text-2xl font-bold text-gray-900">{jobs.length}</div>
-                        <div className="text-xs text-gray-500">Open Jobs</div>
+                        <div className="text-xs text-gray-500">{user.role === 'client' ? 'My Jobs' : 'Open Jobs'}</div>
                     </div>
                     <div className="bg-white border border-gray-200 rounded-xl p-4 text-center shadow-sm">
                         <div className="text-2xl font-bold text-gray-900">{posts.length}</div>
@@ -164,10 +147,12 @@ const Dashboard = () => {
                         <div className="text-2xl font-bold text-gray-900">{user.connects || 0}</div>
                         <div className="text-xs text-gray-500">Connects</div>
                     </div>
-                    <div className="bg-white border border-gray-200 rounded-xl p-4 text-center shadow-sm">
-                        <div className="text-2xl font-bold text-gray-900">{myApps.length}</div>
-                        <div className="text-xs text-gray-500">Applications</div>
-                    </div>
+                    {user.role === 'artist' && (
+                        <div className="bg-white border border-gray-200 rounded-xl p-4 text-center shadow-sm">
+                            <div className="text-2xl font-bold text-gray-900">{myApps.length}</div>
+                            <div className="text-xs text-gray-500">Applications</div>
+                        </div>
+                    )}
                 </div>
 
                 {/* Tabs */}
@@ -175,7 +160,9 @@ const Dashboard = () => {
                     <button onClick={() => setActiveTab('all')}
                         className={`px-4 py-2 rounded-lg text-sm font-medium ${activeTab === 'all' ? 'bg-gray-900 text-white' : 'bg-white border border-gray-300 text-gray-700 hover:bg-gray-50'}`}>All</button>
                     <button onClick={() => setActiveTab('jobs')}
-                        className={`px-4 py-2 rounded-lg text-sm font-medium ${activeTab === 'jobs' ? 'bg-gray-900 text-white' : 'bg-white border border-gray-300 text-gray-700 hover:bg-gray-50'}`}>📋 Jobs</button>
+                        className={`px-4 py-2 rounded-lg text-sm font-medium ${activeTab === 'jobs' ? 'bg-gray-900 text-white' : 'bg-white border border-gray-300 text-gray-700 hover:bg-gray-50'}`}>
+                        {user.role === 'client' ? '📋 My Jobs' : '📋 Jobs'}
+                    </button>
                     <button onClick={() => setActiveTab('posts')}
                         className={`px-4 py-2 rounded-lg text-sm font-medium ${activeTab === 'posts' ? 'bg-gray-900 text-white' : 'bg-white border border-gray-300 text-gray-700 hover:bg-gray-50'}`}>📝 Posts</button>
                     {user?.role === 'artist' && (
@@ -188,7 +175,7 @@ const Dashboard = () => {
                 {(activeTab === 'all' || activeTab === 'jobs') && (
                     <div className="mb-6">
                         <h2 className="text-xl font-bold text-gray-900 mb-4">
-                            {searchTerm ? `Search Results (${displayedJobs.length})` : `📋 Available Jobs (${displayedJobs.length})`}
+                            {searchTerm ? `Search Results (${displayedJobs.length})` : user.role === 'client' ? `📋 My Jobs (${displayedJobs.length})` : `📋 Available Jobs (${displayedJobs.length})`}
                         </h2>
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                             {displayedJobs.map(job => (

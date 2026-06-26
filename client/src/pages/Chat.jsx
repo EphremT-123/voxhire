@@ -16,21 +16,42 @@ const Chat = () => {
     const [socket, setSocket] = useState(null);
     const [messages, setMessages] = useState({});
     const [input, setInput] = useState('');
-    const [users, setUsers] = useState([]);
+    const [contacts, setContacts] = useState([]); // For client: all artists; for artist: only those with messages
     const [selectedUser, setSelectedUser] = useState(null);
     const [showVideoCall, setShowVideoCall] = useState(false);
     const [unreadCounts, setUnreadCounts] = useState({});
     const messagesEndRef = useRef(null);
 
+    // Load user info for contact list
+    const loadContacts = async () => {
+        if (user.role === 'client') {
+            // Clients see all artists
+            try {
+                const { data } = await api.get('/users/search?q=');
+                setContacts(data.filter(u => u.role === 'artist'));
+            } catch (err) { console.error(err); }
+        } else {
+            // Artists see only users who have messaged them
+            const existingIds = Object.keys(messages);
+            if (existingIds.length === 0) return setContacts([]);
+            const users = await Promise.all(
+                existingIds.map(async (id) => {
+                    try {
+                        const { data } = await api.get(`/users/${id}`);
+                        return data;
+                    } catch (e) { return null; }
+                })
+            );
+            setContacts(users.filter(Boolean));
+        }
+    };
+
+    // Socket connection
     useEffect(() => {
         const token = localStorage.getItem('voxhire-token');
         if (!token || !user) return;
 
-        const newSocket = io(SOCKET_URL, {
-            transports: ['websocket'],
-            auth: { token },
-        });
-
+        const newSocket = io(SOCKET_URL, { transports: ['websocket'], auth: { token } });
         newSocket.on('connect', () => {
             console.log('Chat connected');
             newSocket.emit('join-chat', user._id);
@@ -50,26 +71,17 @@ const Chat = () => {
             }
         });
 
-        newSocket.on('unread-counts', (counts) => {
-            setUnreadCounts(counts || {});
-        });
-
+        newSocket.on('unread-counts', (counts) => setUnreadCounts(counts || {}));
         setSocket(newSocket);
         return () => newSocket.close();
     }, [user]);
 
+    // When messages change (especially on first load), refresh contacts for artist
     useEffect(() => {
-        const loadUsers = async () => {
-            try {
-                const { data } = await api.get('/users/search?q=');
-                setUsers(data.filter(u => u._id !== user._id));
-            } catch (err) {
-                console.error('Failed to load users:', err);
-            }
-        };
-        loadUsers();
-    }, []);
+        loadContacts();
+    }, [messages, user]);
 
+    // Auto-scroll
     useEffect(() => {
         messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
     }, [messages, selectedUser]);
@@ -109,16 +121,17 @@ const Chat = () => {
         return userMessages.length > 0 ? userMessages[userMessages.length - 1] : null;
     };
 
-    const sortedUsers = [...users].sort((a, b) => {
+    // Sort contacts: unread first, then by last message time
+    const sortedContacts = [...contacts].sort((a, b) => {
         const aUnread = unreadCounts[a._id] || 0;
         const bUnread = unreadCounts[b._id] || 0;
         if (aUnread > 0 && bUnread === 0) return -1;
         if (bUnread > 0 && aUnread === 0) return 1;
-        const aLastMsg = getLastMessage(a._id);
-        const bLastMsg = getLastMessage(b._id);
-        if (aLastMsg && bLastMsg) return new Date(bLastMsg.timestamp) - new Date(aLastMsg.timestamp);
-        if (aLastMsg) return -1;
-        if (bLastMsg) return 1;
+        const aLast = getLastMessage(a._id);
+        const bLast = getLastMessage(b._id);
+        if (aLast && bLast) return new Date(bLast.timestamp) - new Date(aLast.timestamp);
+        if (aLast) return -1;
+        if (bLast) return 1;
         return 0;
     });
 
@@ -130,37 +143,45 @@ const Chat = () => {
             <div className="max-w-5xl mx-auto p-4 md:p-6">
                 <div className="bg-white border border-gray-200 rounded-2xl shadow-sm overflow-hidden" style={{ height: '75vh' }}>
                     <div className="flex h-full">
-                        {/* Users Sidebar */}
+                        {/* Contacts Sidebar */}
                         <div className="w-72 border-r border-gray-200 flex flex-col flex-shrink-0">
                             <div className="p-4 border-b border-gray-200">
                                 <h2 className="font-bold text-gray-900">💬 Messages</h2>
+                                {user.role === 'artist' && <p className="text-xs text-gray-500 mt-1">Only clients can start a conversation</p>}
                             </div>
                             <div className="flex-1 overflow-y-auto">
-                                {sortedUsers.map(u => {
-                                    const unread = unreadCounts[u._id] || 0;
-                                    const lastMsg = getLastMessage(u._id);
-                                    return (
-                                        <div key={u._id} onClick={() => selectUser(u)}
-                                            className={`p-3 cursor-pointer hover:bg-gray-50 transition flex items-center gap-3 border-b ${selectedUser?._id === u._id ? 'bg-gray-100 border-l-4 border-gray-900' : ''} ${unread > 0 ? 'bg-blue-50' : ''}`}>
-                                            <div className="relative flex-shrink-0">
-                                                <div className="w-11 h-11 rounded-full bg-gray-200 flex items-center justify-center text-gray-700 font-bold text-sm">
-                                                    {u.name?.charAt(0) || '?'}
+                                {sortedContacts.length === 0 ? (
+                                    <p className="p-4 text-sm text-gray-500">
+                                        {user.role === 'artist' ? 'No conversations yet. Wait for a client to message you.' : 'No artists found.'}
+                                    </p>
+                                ) : (
+                                    sortedContacts.map(u => {
+                                        const unread = unreadCounts[u._id] || 0;
+                                        const lastMsg = getLastMessage(u._id);
+                                        return (
+                                            <div key={u._id} onClick={() => selectUser(u)}
+                                                className={`p-3 cursor-pointer hover:bg-gray-50 transition flex items-center gap-3 border-b ${selectedUser?._id === u._id ? 'bg-gray-100 border-l-4 border-gray-900' : ''} ${unread > 0 ? 'bg-blue-50' : ''}`}>
+                                                <div className="relative flex-shrink-0">
+                                                    <div className="w-11 h-11 rounded-full bg-gray-200 flex items-center justify-center text-gray-700 font-bold text-sm">
+                                                        {u.name?.charAt(0) || '?'}
+                                                    </div>
+                                                    {unread > 0 && (
+                                                        <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs w-5 h-5 rounded-full flex items-center justify-center font-bold">
+                                                            {unread > 9 ? '9+' : unread}
+                                                        </span>
+                                                    )}
                                                 </div>
-                                                {unread > 0 && (
-                                                    <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs w-5 h-5 rounded-full flex items-center justify-center font-bold">
-                                                        {unread > 9 ? '9+' : unread}
-                                                    </span>
-                                                )}
+                                                <div className="flex-1 min-w-0">
+                                                    <p className={`text-sm truncate ${unread > 0 ? 'font-bold text-gray-900' : 'font-medium text-gray-700'}`}>{u.name}</p>
+                                                    <p className="text-xs text-gray-400 truncate">{lastMsg ? lastMsg.message : u.role}</p>
+                                                </div>
                                             </div>
-                                            <div className="flex-1 min-w-0">
-                                                <p className={`text-sm truncate ${unread > 0 ? 'font-bold text-gray-900' : 'font-medium text-gray-700'}`}>{u.name}</p>
-                                                <p className="text-xs text-gray-400 truncate">{lastMsg ? lastMsg.message : u.role}</p>
-                                            </div>
-                                        </div>
-                                    );
-                                })}
+                                        );
+                                    })
+                                )}
                             </div>
                         </div>
+
                         {/* Chat Area */}
                         <div className="flex-1 flex flex-col min-w-0">
                             {selectedUser ? (

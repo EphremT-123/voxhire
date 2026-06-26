@@ -11,6 +11,7 @@ import Applications from './pages/Applications';
 import MyApplications from './pages/MyApplications';
 import Profile from './pages/Profile';
 import Chat from './pages/Chat';
+import UserSearch from './pages/UserSearch';
 
 function App() {
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
@@ -47,6 +48,7 @@ function App() {
         <Route path="/profile" element={isAuthenticated ? <Profile /> : <Navigate to="/login" />} />
         <Route path="/profile/:id" element={isAuthenticated ? <Profile /> : <Navigate to="/login" />} />
         <Route path="/chat" element={isAuthenticated ? <Chat /> : <Navigate to="/login" />} />
+        <Route path="/search" element={isAuthenticated ? <UserSearch /> : <Navigate to="/login" />} />
       </Routes>
     </BrowserRouter>
   );

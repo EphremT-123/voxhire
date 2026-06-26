@@ -29,6 +29,7 @@ const Profile = () => {
     const profileId = id || user?._id;
     const isOwnProfile = !id || id === user?._id;
     const isArtist = profile?.role === 'artist';
+    const isClient = profile?.role === 'client';
 
     useEffect(() => {
         if (profileId) fetchProfile();
@@ -105,7 +106,22 @@ const Profile = () => {
     };
 
     if (loading) return <div className="min-h-screen bg-gray-50"><Navbar /><p className="text-center p-6 text-gray-500">Loading...</p></div>;
-    if (!profile) return <div className="min-h-screen bg-gray-50"><Navbar /><p className="text-center p-6 text-gray-500">User not found</p></div>;
+
+    // Rule: artists cannot view client profiles
+    if (user.role === 'artist' && profile && isClient && !isOwnProfile) {
+        return (
+            <div className="min-h-screen bg-gray-50">
+                <Navbar />
+                <div className="max-w-4xl mx-auto p-6">
+                    <div className="bg-white border border-gray-200 rounded-2xl p-8 text-center shadow-sm">
+                        <div className="text-6xl mb-4">🔒</div>
+                        <h2 className="text-2xl font-bold text-gray-900 mb-2">Private Profile</h2>
+                        <p className="text-gray-500">You cannot view this client's profile.</p>
+                    </div>
+                </div>
+            </div>
+        );
+    }
 
     return (
         <div className="min-h-screen bg-gray-50">
