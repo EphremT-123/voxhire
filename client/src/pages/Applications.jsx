@@ -15,14 +15,19 @@ const Applications = () => {
     const [compareList, setCompareList] = useState([]);
     const [error, setError] = useState('');
 
+    // Invite states
+    const [showInvite, setShowInvite] = useState(false);
+    const [searchQuery, setSearchQuery] = useState('');
+    const [artistResults, setArtistResults] = useState([]);
+    const [inviting, setInviting] = useState(false);
+
     useEffect(() => { fetchApplications(); }, [id]);
 
     const fetchApplications = async () => {
         try {
             setLoading(true); setError('');
             const { data } = await api.get(`/jobs/${id}/applications`);
-            setJob(data.job);
-            setApplications(data.applications || []);
+            setJob(data.job); setApplications(data.applications || []);
         } catch (err) { setError(err.response?.data?.message || 'Failed'); }
         finally { setLoading(false); }
     };
@@ -43,7 +48,33 @@ const Applications = () => {
         else if (compareList.length < 3) setCompareList([...compareList, app]);
     };
 
-    const getStatusBadge = (s) => ({ pending: 'bg-yellow-100 text-yellow-800', shortlisted: 'bg-blue-100 text-blue-800', accepted: 'bg-green-100 text-green-800', declined: 'bg-red-100 text-red-800' }[s] || 'bg-gray-100');
+    const searchArtists = async () => {
+        if (!searchQuery.trim()) return;
+        try {
+            const { data } = await api.get(`/users/search?q=${searchQuery}`);
+            setArtistResults(data.filter(u => u.role === 'artist'));
+        } catch (err) { console.error(err); }
+    };
+
+    const inviteArtist = async (artistId) => {
+        setInviting(true);
+        try {
+            await api.post(`/jobs/${id}/invite`, { artistId });
+            alert('Invitation sent! The artist can now apply for free.');
+            setShowInvite(false);
+        } catch (err) {
+            alert(err.response?.data?.message || 'Failed to invite');
+        } finally {
+            setInviting(false);
+        }
+    };
+
+    const getStatusBadge = (s) => ({
+        pending: 'bg-yellow-100 text-yellow-800',
+        shortlisted: 'bg-blue-100 text-blue-800',
+        accepted: 'bg-green-100 text-green-800',
+        declined: 'bg-red-100 text-red-800'
+    }[s] || 'bg-gray-100');
 
     if (loading) return <div className="min-h-screen bg-gray-50"><Navbar /><p className="text-center p-6 text-gray-500">Loading...</p></div>;
 
@@ -54,23 +85,61 @@ const Applications = () => {
                 {error && <div className="bg-red-50 text-red-600 p-3 rounded-xl mb-4">{error}</div>}
                 {job && (
                     <div className="bg-white border border-gray-200 rounded-2xl p-6 shadow-sm mb-6">
-                        <div className="flex justify-between items-center">
-                            <div><h1 className="text-2xl font-bold text-gray-900">{job.title}</h1><p className="text-gray-500">💰 ${job.budget} | ⏰ {job.deadline} | 📝 {applications.length} applicants</p></div>
+                        <div className="flex justify-between items-center flex-wrap gap-3">
+                            <div>
+                                <h1 className="text-2xl font-bold text-gray-900">{job.title}</h1>
+                                <p className="text-gray-500">💰 ${job.budget} | ⏰ {job.deadline} | 📝 {applications.length} applicants</p>
+                            </div>
                             <button onClick={() => navigate('/dashboard')} className="text-gray-600 hover:text-gray-900 font-medium">← Back</button>
                         </div>
+                        <button onClick={() => setShowInvite(!showInvite)} className="mt-3 bg-blue-600 text-white px-4 py-2 rounded-xl text-sm font-medium">
+                            {showInvite ? 'Cancel' : '✉️ Invite Artist'}
+                        </button>
+                        {showInvite && (
+                            <div className="mt-4 p-4 border border-gray-200 rounded-xl bg-gray-50">
+                                <div className="flex gap-2 mb-3">
+                                    <input
+                                        type="text"
+                                        placeholder="Search artist by username..."
+                                        value={searchQuery}
+                                        onChange={(e) => setSearchQuery(e.target.value)}
+                                        className="flex-1 p-2 border border-gray-300 rounded-lg"
+                                    />
+                                    <button onClick={searchArtists} className="bg-gray-900 text-white px-4 py-2 rounded-lg">Search</button>
+                                </div>
+                                {artistResults.length > 0 && (
+                                    <div className="space-y-2">
+                                        {artistResults.map(artist => (
+                                            <div key={artist._id} className="flex justify-between items-center bg-white p-2 rounded-lg">
+                                                <div>
+                                                    <p className="font-semibold text-gray-900">{artist.name} <span className="text-gray-400">@{artist.username}</span></p>
+                                                </div>
+                                                <button
+                                                    onClick={() => inviteArtist(artist._id)}
+                                                    disabled={inviting}
+                                                    className="bg-blue-600 text-white px-3 py-1 rounded-lg text-sm disabled:opacity-50"
+                                                >
+                                                    Invite
+                                                </button>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+                        )}
                     </div>
                 )}
 
+                {/* Compare Bar */}
                 {compareList.length > 0 && (
                     <div className="bg-white border border-gray-200 rounded-2xl p-4 shadow-sm mb-4">
-                        <h3 className="font-bold text-gray-900 mb-3">🔍 Comparing {compareList.length}</h3>
+                        <h3 className="font-bold text-gray-900 mb-3">🔍 Comparing {compareList.length} Applicants</h3>
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
                             {compareList.map(app => (
                                 <div key={app._id} className="bg-gray-50 p-4 rounded-xl">
                                     <p className="font-bold text-gray-900">{app.artist?.name || app.artistName}</p>
                                     <p className="text-gray-500">⭐ {app.artist?.rating || 'N/A'}</p>
                                     <p className="text-gray-500">🎙️ {app.artist?.experience || 'N/A'}</p>
-                                    {app.coverLetter && <p className="text-gray-600 mt-2 italic text-xs">"{app.coverLetter.substring(0, 100)}..."</p>}
                                     <button onClick={() => toggleCompare(app)} className="text-red-500 text-xs mt-2">Remove</button>
                                 </div>
                             ))}
@@ -78,6 +147,7 @@ const Applications = () => {
                     </div>
                 )}
 
+                {/* Applications Grid */}
                 {applications.length === 0 ? (
                     <div className="bg-white border border-gray-200 rounded-2xl p-12 text-center text-gray-400">No applications yet.</div>
                 ) : (
@@ -116,6 +186,7 @@ const Applications = () => {
                     </div>
                 )}
 
+                {/* Detail Modal */}
                 {selectedApp && (
                     <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4" onClick={() => setSelectedApp(null)}>
                         <div className="bg-white rounded-2xl p-6 max-w-lg w-full max-h-[85vh] overflow-y-auto shadow-lg" onClick={e => e.stopPropagation()}>
@@ -126,7 +197,7 @@ const Applications = () => {
                                 </div>
                                 <button onClick={() => setSelectedApp(null)} className="text-gray-400 text-2xl">✕</button>
                             </div>
-                            {/* ...rest of details similar to previous, with gray styling... */}
+                            {/* ... rest of detail content (bio, stats, cover letter, portfolio, etc.) ... */}
                             <div className="flex gap-3 pt-4 border-t">
                                 {selectedApp.status !== 'accepted' && selectedApp.status !== 'declined' && <>
                                     <button onClick={() => { handleHire(selectedApp._id, selectedApp.artist?.name || selectedApp.artistName); setSelectedApp(null); }} className="bg-gray-900 text-white px-6 py-2 rounded-xl font-medium flex-1">✅ Hire</button>

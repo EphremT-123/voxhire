@@ -4,26 +4,71 @@ const { protect } = require('../middleware/authMiddleware');
 const User = require('../models/User');
 const upload = require('../middleware/uploadMiddleware');
 const cloudinary = require('cloudinary').v2;
+const Job = require('../models/Job');
+const Application = require('../models/Application');
 
-// Configure Cloudinary
-cloudinary.config({
-    cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
-    api_key: process.env.CLOUDINARY_API_KEY,
-    api_secret: process.env.CLOUDINARY_API_SECRET,
-});
-// Search users
+// Search users (with privacy: artists can't see clients)
 router.get('/search', protect, async (req, res) => {
     try {
         const { q } = req.query;
-        const users = await User.find({ username: { $regex: q, $options: 'i' } })
-            .select('name username email role bio location profilePicture portfolio');
+        let users = await User.find({ username: { $regex: q, $options: 'i' } })
+            .select('name username email role bio location profilePicture');
+        // Artists cannot see clients in search
+        if (req.user.role === 'artist') {
+            users = users.filter(u => u.role !== 'client');
+        }
         res.json(users);
     } catch (error) {
         res.status(500).json({ message: 'Server error' });
     }
 });
 
-// Get user profile by ID
+// Get contacts for chat sidebar
+router.get('/contacts', protect, async (req, res) => {
+    try {
+        const userId = req.user._id;
+        const role = req.user.role;
+        let contacts = [];
+
+        if (role === 'client') {
+            // Clients see artists who have applied to any of their jobs (including invitations)
+            const clientJobs = await Job.find({ client: userId }).select('_id');
+            const jobIds = clientJobs.map(j => j._id);
+            const applications = await Application.find({ job: { $in: jobIds } })
+                .populate('artist', 'name username email profilePicture role')
+                .select('artist');
+
+            const artistMap = {};
+            applications.forEach(app => {
+                if (app.artist && app.artist._id) {
+                    artistMap[app.artist._id.toString()] = app.artist;
+                }
+            });
+            contacts = Object.values(artistMap);
+        } else if (role === 'artist') {
+            // Artists see clients who have interacted with them (applications to their jobs, or invitations received)
+            const apps = await Application.find({ artist: userId })
+                .populate('job', 'client title')
+                .lean();
+            const clientMap = {};
+            for (const app of apps) {
+                if (app.job && app.job.client) {
+                    const client = await User.findById(app.job.client)
+                        .select('name username email profilePicture role');
+                    if (client) clientMap[client._id.toString()] = client;
+                }
+            }
+            contacts = Object.values(clientMap);
+        }
+
+        res.json(contacts);
+    } catch (error) {
+        console.error('Contacts error:', error);
+        res.status(500).json({ message: 'Server error' });
+    }
+});
+
+// Get user profile by ID (with privacy: artists can't view client profiles)
 router.get('/:id', protect, async (req, res) => {
     try {
         const user = await User.findById(req.params.id)
@@ -31,6 +76,12 @@ router.get('/:id', protect, async (req, res) => {
             .populate('followers', 'name username profilePicture')
             .populate('following', 'name username profilePicture');
         if (!user) return res.status(404).json({ message: 'User not found' });
+
+        // Block artists from viewing client profiles (except own)
+        if (req.user.role === 'artist' && user.role === 'client' && user._id.toString() !== req.user._id.toString()) {
+            return res.status(403).json({ message: 'You cannot view this profile.' });
+        }
+
         const userData = user.toObject();
         if (!userData.showEmail) userData.email = 'Hidden';
         res.json(userData);
@@ -42,38 +93,15 @@ router.get('/:id', protect, async (req, res) => {
 // Upload profile picture
 router.post('/profile-picture', protect, upload.single('image'), async (req, res) => {
     try {
-        console.log('=== PROFILE PIC UPLOAD ===');
-        console.log('File received:', req.file ? req.file.originalname : 'NO FILE');
-        console.log('File mimetype:', req.file?.mimetype);
-        console.log('File size:', req.file?.size);
-        console.log('Cloudinary config:', {
-            cloud: process.env.CLOUDINARY_CLOUD_NAME ? 'SET' : 'MISSING',
-            key: process.env.CLOUDINARY_API_KEY ? 'SET' : 'MISSING',
-            secret: process.env.CLOUDINARY_API_SECRET ? 'SET' : 'MISSING'
-        });
-
-        if (!req.file) {
-            return res.status(400).json({ message: 'No image uploaded' });
-        }
-
-        const b64 = `data:${req.file.mimetype};base64,${req.file.buffer.toString('base64')}`;
-        console.log('Base64 length:', b64.length);
-
-        const result = await cloudinary.uploader.upload(b64, {
-            folder: 'voxhire_profiles',
-            width: 400,
-            height: 400,
-            crop: 'fill'
-        });
-
-        console.log('Upload success:', result.secure_url);
+        if (!req.file) return res.status(400).json({ message: 'No image uploaded' });
+        const result = await cloudinary.uploader.upload(
+            `data:${req.file.mimetype};base64,${req.file.buffer.toString('base64')}`,
+            { folder: 'voxhire_profiles', width: 400, height: 400, crop: 'fill' }
+        );
         await User.findByIdAndUpdate(req.user._id, { profilePicture: result.secure_url });
         res.json({ profilePicture: result.secure_url });
     } catch (error) {
-        console.error('=== PROFILE PIC ERROR ===');
-        console.error('Message:', error.message);
-        console.error('Full error:', error);
-        res.status(500).json({ message: 'Upload failed', error: error.message });
+        res.status(500).json({ message: 'Server error' });
     }
 });
 
@@ -97,7 +125,6 @@ router.post('/portfolio', protect, upload.single('file'), async (req, res) => {
     try {
         let url = req.body.url || '';
         let type = req.body.type || 'audio';
-
         if (req.file) {
             const result = await cloudinary.uploader.upload(
                 `data:${req.file.mimetype};base64,${req.file.buffer.toString('base64')}`,
@@ -108,7 +135,6 @@ router.post('/portfolio', protect, upload.single('file'), async (req, res) => {
             else if (req.file.mimetype.startsWith('audio/')) type = 'audio';
             else if (req.file.mimetype.startsWith('image/')) type = 'image';
         }
-
         const portfolioItem = {
             title: req.body.title || 'Untitled',
             url,
@@ -116,13 +142,11 @@ router.post('/portfolio', protect, upload.single('file'), async (req, res) => {
             description: req.body.description || '',
             createdAt: new Date()
         };
-
         const user = await User.findByIdAndUpdate(
             req.user._id,
             { $push: { portfolio: portfolioItem } },
             { new: true }
         ).select('-password');
-
         res.json(user.portfolio);
     } catch (error) {
         res.status(500).json({ message: 'Server error', error: error.message });

@@ -16,35 +16,25 @@ const Chat = () => {
     const [socket, setSocket] = useState(null);
     const [messages, setMessages] = useState({});
     const [input, setInput] = useState('');
-    const [contacts, setContacts] = useState([]); // For client: all artists; for artist: only those with messages
+    const [contacts, setContacts] = useState([]);
     const [selectedUser, setSelectedUser] = useState(null);
     const [showVideoCall, setShowVideoCall] = useState(false);
     const [unreadCounts, setUnreadCounts] = useState({});
     const messagesEndRef = useRef(null);
 
-    // Load user info for contact list
+    // Load contacts from new endpoint
     const loadContacts = async () => {
-        if (user.role === 'client') {
-            // Clients see all artists
-            try {
-                const { data } = await api.get('/users/search?q=');
-                setContacts(data.filter(u => u.role === 'artist'));
-            } catch (err) { console.error(err); }
-        } else {
-            // Artists see only users who have messaged them
-            const existingIds = Object.keys(messages);
-            if (existingIds.length === 0) return setContacts([]);
-            const users = await Promise.all(
-                existingIds.map(async (id) => {
-                    try {
-                        const { data } = await api.get(`/users/${id}`);
-                        return data;
-                    } catch (e) { return null; }
-                })
-            );
-            setContacts(users.filter(Boolean));
+        try {
+            const { data } = await api.get('/users/contacts');
+            setContacts(data);
+        } catch (err) {
+            console.error('Failed to load contacts', err);
         }
     };
+
+    useEffect(() => {
+        loadContacts();
+    }, [user]);
 
     // Socket connection
     useEffect(() => {
@@ -76,12 +66,11 @@ const Chat = () => {
         return () => newSocket.close();
     }, [user]);
 
-    // When messages change (especially on first load), refresh contacts for artist
+    // Refresh contacts when messages change (in case new interaction happens)
     useEffect(() => {
         loadContacts();
-    }, [messages, user]);
+    }, [messages]);
 
-    // Auto-scroll
     useEffect(() => {
         messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
     }, [messages, selectedUser]);
@@ -121,7 +110,6 @@ const Chat = () => {
         return userMessages.length > 0 ? userMessages[userMessages.length - 1] : null;
     };
 
-    // Sort contacts: unread first, then by last message time
     const sortedContacts = [...contacts].sort((a, b) => {
         const aUnread = unreadCounts[a._id] || 0;
         const bUnread = unreadCounts[b._id] || 0;
@@ -143,17 +131,14 @@ const Chat = () => {
             <div className="max-w-5xl mx-auto p-4 md:p-6">
                 <div className="bg-white border border-gray-200 rounded-2xl shadow-sm overflow-hidden" style={{ height: '75vh' }}>
                     <div className="flex h-full">
-                        {/* Contacts Sidebar */}
                         <div className="w-72 border-r border-gray-200 flex flex-col flex-shrink-0">
                             <div className="p-4 border-b border-gray-200">
                                 <h2 className="font-bold text-gray-900">💬 Messages</h2>
-                                {user.role === 'artist' && <p className="text-xs text-gray-500 mt-1">Only clients can start a conversation</p>}
+                                {user.role === 'artist' && <p className="text-xs text-gray-500 mt-1">Only clients you've interacted with appear here.</p>}
                             </div>
                             <div className="flex-1 overflow-y-auto">
                                 {sortedContacts.length === 0 ? (
-                                    <p className="p-4 text-sm text-gray-500">
-                                        {user.role === 'artist' ? 'No conversations yet. Wait for a client to message you.' : 'No artists found.'}
-                                    </p>
+                                    <p className="p-4 text-sm text-gray-500">No conversations yet.</p>
                                 ) : (
                                     sortedContacts.map(u => {
                                         const unread = unreadCounts[u._id] || 0;
@@ -181,8 +166,6 @@ const Chat = () => {
                                 )}
                             </div>
                         </div>
-
-                        {/* Chat Area */}
                         <div className="flex-1 flex flex-col min-w-0">
                             {selectedUser ? (
                                 <>
