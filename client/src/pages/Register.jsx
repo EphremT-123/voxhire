@@ -25,24 +25,51 @@ const Register = () => {
     };
 
     return (
-        <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-amber-900 via-amber-800 to-blue-900">
-            <form onSubmit={handleSubmit} className="bg-white/95 backdrop-blur p-8 rounded-2xl shadow-2xl w-96">
-                <h2 className="text-2xl font-bold mb-6 text-center text-amber-900">Create VoxHire Account</h2>
+        <div className="min-h-screen flex items-center justify-center bg-gray-50">
+            <form onSubmit={handleSubmit} className="bg-white p-8 rounded-2xl shadow-md w-96 border border-gray-200">
+                <h2 className="text-2xl font-bold mb-6 text-center text-gray-900">Create VoxHire Account</h2>
                 {error && <p className="text-red-500 text-sm mb-3 bg-red-50 p-2 rounded">{error}</p>}
-                <input type="text" placeholder="Full Name" className="w-full p-3 mb-3 border-2 border-amber-200 rounded-xl focus:border-blue-600 outline-none"
-                    value={name} onChange={(e) => setName(e.target.value)} required />
-                <input type="text" placeholder="Username (unique)" className="w-full p-3 mb-3 border-2 border-amber-200 rounded-xl focus:border-blue-600 outline-none"
-                    value={username} onChange={(e) => setUsername(e.target.value)} required />
-                <input type="email" placeholder="Email" className="w-full p-3 mb-3 border-2 border-amber-200 rounded-xl focus:border-blue-600 outline-none"
-                    value={email} onChange={(e) => setEmail(e.target.value)} required />
-                <input type="password" placeholder="Password" className="w-full p-3 mb-3 border-2 border-amber-200 rounded-xl focus:border-blue-600 outline-none"
-                    value={password} onChange={(e) => setPassword(e.target.value)} required />
-                <select className="w-full p-3 mb-4 border-2 border-amber-200 rounded-xl focus:border-blue-600 outline-none bg-white"
-                    value={role} onChange={(e) => setRole(e.target.value)}>
+                <input
+                    type="text"
+                    placeholder="Full Name"
+                    className="w-full p-3 mb-3 border border-gray-300 rounded-xl focus:border-gray-600 outline-none text-gray-800"
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    required
+                />
+                <input
+                    type="text"
+                    placeholder="Username (unique)"
+                    className="w-full p-3 mb-3 border border-gray-300 rounded-xl focus:border-gray-600 outline-none text-gray-800"
+                    value={username}
+                    onChange={(e) => setUsername(e.target.value)}
+                    required
+                />
+                <input
+                    type="email"
+                    placeholder="Email"
+                    className="w-full p-3 mb-3 border border-gray-300 rounded-xl focus:border-gray-600 outline-none text-gray-800"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    required
+                />
+                <input
+                    type="password"
+                    placeholder="Password"
+                    className="w-full p-3 mb-3 border border-gray-300 rounded-xl focus:border-gray-600 outline-none text-gray-800"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    required
+                />
+                <select
+                    className="w-full p-3 mb-4 border border-gray-300 rounded-xl focus:border-gray-600 outline-none bg-white text-gray-800"
+                    value={role}
+                    onChange={(e) => setRole(e.target.value)}
+                >
                     <option value="client">👔 Client</option>
                     <option value="artist">🎤 Artist</option>
                 </select>
-                <button className="w-full bg-gradient-to-r from-amber-800 to-blue-800 text-white p-3 rounded-xl font-semibold hover:shadow-lg transition">
+                <button className="w-full bg-gray-900 text-white p-3 rounded-xl font-semibold hover:bg-gray-800 transition">
                     Register
                 </button>
 
@@ -51,8 +78,11 @@ const Register = () => {
                     <GoogleLogin onSuccess={() => navigate('/dashboard')} />
                 </div>
 
-                <p className="mt-4 text-center text-sm text-gray-600">
-                    Already have an account? <Link to="/login" className="text-blue-700 font-semibold hover:underline">Login</Link>
+                <p className="mt-4 text-center text-sm text-gray-500">
+                    Already have an account?{' '}
+                    <Link to="/login" className="text-gray-900 font-semibold hover:underline">
+                        Login
+                    </Link>
                 </p>
             </form>
         </div>

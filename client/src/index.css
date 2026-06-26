@@ -1,3 +1,35 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+body {
+    background-color: #ffffff;
+    color: #111111;
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+}
+
+/* Smooth transitions for all interactive elements */
+a,
+button {
+    transition: all 0.15s ease;
+}
+
+/* Custom scrollbar for chat and modals */
+::-webkit-scrollbar {
+    width: 6px;
+}
+
+::-webkit-scrollbar-track {
+    background: #f5f5f5;
+}
+
+::-webkit-scrollbar-thumb {
+    background: #ccc;
+    border-radius: 3px;
+}
+
+/* Remove default gradients from the whole app */
+.bg-gradient-to-br,
+.bg-gradient-to-r {
+    background: #ffffff !important;
+}
